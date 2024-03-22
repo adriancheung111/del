@@ -1,1 +1,381 @@
-test
+var seatLeft = "xx%";
+var displayStat = true;
+var useOldBusyPage = false;
+var ddsScheduler = undefined;
+var enableAutoRetry = true;
+var remainTime = 10;
+var remainTimeCountDown = undefined;
+var enableButtonTime = 7;
+var urlThrottler = "https://event.cityline.com";
+var url = new URL(window.location.href);
+var useOld = url.searchParams.get("0") != null || useOldBusyPage;
+var retryPage = url.searchParams.get("loc");
+var startTimestamp = Date.now();
+var tFlag = false;
+var isWasmInit = false;
+function getHtmlDocName() {
+  var _0x3bb95c = location.pathname;
+  docName = _0x3bb95c.substring(1, _0x3bb95c.lastIndexOf("."));
+  return docName;
+}
+function goToCityline() {
+  window.location = "https://www.cityline.com";
+}
+function showTicket() {
+  $("#showTicekInfo").addClass("d-none");
+  $(".ticketInfo").addClass("d-block");
+  $(".ticketInfo p").addClass("d-block");
+}
+function closeTicket() {
+  $("#showTicekInfo").removeClass("d-none");
+  $(".ticketInfo").removeClass("d-block");
+  $(".ticketInfo p").removeClass("d-block");
+}
+function setRetryUrl() {
+  if (retryPage) {
+    if (useOld) {
+      urlThrottler = urlThrottler + retryPage;
+    } else {
+      urlThrottler = urlThrottler + "/queue?loc=" + encodeURIComponent(retryPage);
+    }
+  }
+}
+function startCountDownTimer() {
+  if (displayStat) {
+    document.getElementById("busy_msg2").style.display = "block";
+  }
+  if (enableAutoRetry) {
+    remainTimeCountDown = remainTime;
+    setRemainTime(remainTimeCountDown);
+    if (ddsScheduler == undefined) {
+      ddsScheduler = setInterval(function () {
+        updateRemainTime();
+      }, 1000);
+    }
+  } else {
+    document.getElementById("remainTime1").innerHTML = "";
+    $("#btn-retry-en-1").removeAttr("disabled");
+  }
+  document.getElementById("busy_msg2").style.display = "none";
+  $("#showTicekInfo").addClass("d-none");
+  $.ajax({
+    type: "get",
+    url: "https://msg.cityline.com/data.json",
+    dataType: "json",
+    success: function (_0x4fe1e8) {
+      getTicketInfo(_0x4fe1e8);
+    }
+  });
+}
+function getTicketInfo(_0x52b58d) {
+  $("#ticketTable").html("");
+  if (_0x52b58d.ticketSummary && _0x52b58d.ticketSummary.en && _0x52b58d.ticketSummary.tc) {
+    document.getElementById("seatLeft1").innerHTML = _0x52b58d.ticketSummary.en;
+    document.getElementById("seatLeft2").innerHTML = _0x52b58d.ticketSummary.tc;
+    document.getElementById("busy_msg2").style.display = "block";
+  } else {
+    document.getElementById("busy_msg2").style.display = "none";
+  }
+  if (_0x52b58d.retryRemarks) {
+    document.getElementById("retryRemarks").innerHTML = _0x52b58d.retryRemarks;
+    document.getElementById("retryRemarks").style.display = "block";
+  } else {
+    document.getElementById("retryRemarks").style.display = "none";
+  }
+  if (_0x52b58d.event && JSON.stringify(_0x52b58d.event) !== "{}") {
+    if (_0x52b58d.event.label) {
+      document.querySelector("#showTicekInfo span").innerHTML = _0x52b58d.event.label;
+      document.getElementById("ticketInfoLabel").innerHTML = _0x52b58d.event.label;
+    }
+    let _0x42c5f1 = _0x52b58d.event.ticketLeft;
+    if (_0x42c5f1.length > 0) {
+      for (let _0x55242f = 0; _0x55242f < _0x42c5f1.length; _0x55242f++) {
+        let _0x2cb235 = document.createElement("tr");
+        document.getElementById("ticketTable").appendChild(_0x2cb235);
+        for (let _0x5d28fb in _0x42c5f1[_0x55242f]) {
+          let _0x183aff = document.createElement("td");
+          _0x2cb235.appendChild(_0x183aff);
+          _0x183aff.innerHTML = _0x42c5f1[_0x55242f][_0x5d28fb];
+        }
+      }
+      if (_0x42c5f1.length > 3) {
+        if (isMobile()) {
+          $(".ticketInfo div").css("overflow", "auto");
+        }
+      }
+    }
+    $("#showTicekInfo").removeClass("d-none");
+  } else {
+    $("#showTicekInfo").addClass("d-none");
+  }
+}
+function isMobile() {
+  let _0x380fae = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  return _0x380fae;
+}
+function setRemainTime(_0x253ed0) {
+  document.getElementById("remainTime1").innerHTML = "(" + _0x253ed0 + ")";
+}
+function retry() {
+  $("#btn-retry-en-1").hide();
+  $("#btn-retrying-en-1").show();
+  if (ddsScheduler != undefined) {
+    clearInterval(ddsScheduler);
+    ddsScheduler = undefined;
+  }
+  setTimeout(doRetry, 1000);
+}
+function doRetry() {
+  if (useOld || !retryPage) {
+    location.href = urlThrottler;
+    return;
+  }
+  $.ajax({
+    url: urlThrottler,
+    type: "POST",
+    cache: false,
+    dataType: "json",
+    data: {
+      data: getData()
+    },
+    xhrFields: {
+      withCredentials: true
+    },
+    success: function (_0xa5dc8c) {
+      console.log(_0xa5dc8c);
+      if (_0xa5dc8c.ACTION == "REDIRECT") {
+        location.href = _0xa5dc8c.REDIRECT_URL;
+      } else {
+        startTimestamp = _0xa5dc8c.STIMESTAMP;
+        resetRetry();
+      }
+    },
+    error: function (_0x182122, _0x3d510b, _0x3f0e88) {
+      startTimestamp = Date.now();
+      console.error(_0x182122.responseText);
+      resetRetry();
+    }
+  });
+}
+function resetRetry() {
+  $("#btn-retry-en-1").show();
+  $("#btn-retry-en-1").attr("disabled", "disabled");
+  $("#remainTime1").html("");
+  $("#btn-retrying-en-1").hide();
+  setTimeout(startCountDownTimer, 1000);
+}
+function hex2array(_0x3ffab6) {
+  return Uint8Array.from(_0x3ffab6.match(/.{1,2}/g).map(_0x94645f => parseInt(_0x94645f, 16)));
+}
+function array2hex(_0x4fbc4a) {
+  return Array.prototype.map.call(_0x4fbc4a, _0x4fb38b => ("0" + _0x4fb38b.toString(16)).slice(-2)).join("");
+}
+function padSpace(_0x4c0773) {
+  while (_0x4c0773.length % 16 !== 0) {
+    _0x4c0773 += " ";
+  }
+  return _0x4c0773;
+}
+function stringToHex(_0x302ee8) {
+  let _0x228904 = "";
+  for (let _0x4bab00 = 0; _0x4bab00 < _0x302ee8.length; _0x4bab00++) {
+    let _0x2d1696 = _0x302ee8.charCodeAt(_0x4bab00).toString(16);
+    _0x228904 += _0x2d1696.padStart(2, "0");
+  }
+  return _0x228904;
+}
+function getData() {
+  if (!isWasmInit) {
+    return "";
+  }
+  var _0xa5e3c1 = tFlag || remainTimeCountDown == 0 || false;
+  var _0x3d4cae = _0xa5e3c1 ? 50 + Math.floor(Math.random() * 51) : Math.floor(Math.random() * 50);
+  var _0x399749 = {
+    currentTimestamp: startTimestamp,
+    s: _0x3d4cae
+  };
+  var _0x4ada5d = _0x399749;
+  var _0x3806ef = JSON.stringify(_0x4ada5d);
+  var _0x5a22d5 = padSpace(_0x3806ef);
+  var _0x215e16 = _0x5a22d5.length;
+  var _0x34aac9 = Module._malloc(_0x215e16);
+  var _0x54a27d = Module._malloc(_0x215e16);
+  var _0x3ff82b = hex2array(stringToHex(_0x5a22d5));
+  Module.HEAP8.set(_0x3ff82b, _0x34aac9);
+  Module._get_data(_0x34aac9, _0x215e16, _0x54a27d);
+  var _0x31c941 = new Uint8Array(Module.HEAP8.buffer, _0x54a27d, _0x215e16);
+  Module._free(_0x34aac9);
+  Module._free(_0x54a27d);
+  return array2hex(_0x31c941);
+}
+function updateRemainTime() {
+  if (remainTimeCountDown > 0) {
+    remainTimeCountDown--;
+    if (remainTimeCountDown == 0) {
+      $("#btn-retry-en-1").hide();
+      $("#btn-retrying-en-1").show();
+    } else {
+      if (remainTimeCountDown == enableButtonTime) {
+        $("#btn-retry-en-1").removeAttr("disabled");
+      }
+      setRemainTime(remainTimeCountDown);
+    }
+  } else {
+    if (ddsScheduler != undefined) {
+      clearInterval(ddsScheduler);
+      ddsScheduler = undefined;
+    }
+    tFlag = false;
+    retry();
+  }
+}
+function isWebAssemblySupported() {
+  try {
+    if (typeof WebAssembly === "object") {
+      const _0x322a0d = new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));
+      if (_0x322a0d instanceof WebAssembly.Module) {
+        const _0x5073b0 = new WebAssembly.Instance(_0x322a0d);
+        return _0x5073b0 instanceof WebAssembly.Instance;
+      }
+    }
+  } catch (_0x4a4f1a) {}
+  return false;
+}
+function isWebAssemblyInitSupported() {
+  return typeof WebAssembly.instantiateStreaming === "function";
+}
+function checkWasmSupport() {
+  if (!isWebAssemblySupported() || !isWebAssemblyInitSupported()) {
+    $("#ws").text("ã");
+  }
+}
+(function (_0x329e5b) {
+  _0x329e5b.fn.DuplicateWindow = function () {
+    var _0x1ee0cb = 5000;
+    var _0x3d0cd5 = 500;
+    var _0x50cb32 = "my-application-browser-tab";
+    var _0x18dc4a = "browser-tab-guid";
+    var _0x2d1bf2 = {
+      Session: 1,
+      Local: 2
+    };
+    function _0x944886(_0x2b15bc, _0x49497c, _0x302d23) {
+      var _0x42335c = "";
+      if (_0x302d23) {
+        var _0x571f81 = new Date();
+        _0x571f81.setTime(_0x571f81.getTime() + _0x302d23 * 24 * 60 * 60 * 1000);
+        _0x42335c = "; expires=" + _0x571f81.toUTCString();
+      }
+      document.cookie = _0x2b15bc + "=" + (_0x49497c || "") + _0x42335c + "; path=/";
+    }
+    function _0x45bb9f(_0xa0f72c) {
+      var _0x44506d = _0xa0f72c + "=";
+      var _0x33bab3 = document.cookie.split(";");
+      for (var _0x2bfd2c = 0; _0x2bfd2c < _0x33bab3.length; _0x2bfd2c++) {
+        var _0x46aa32 = _0x33bab3[_0x2bfd2c];
+        while (_0x46aa32.charAt(0) == " ") {
+          _0x46aa32 = _0x46aa32.substring(1, _0x46aa32.length);
+        }
+        if (_0x46aa32.indexOf(_0x44506d) == 0) {
+          return _0x46aa32.substring(_0x44506d.length, _0x46aa32.length);
+        }
+      }
+      return null;
+    }
+    function _0x4e9b36(_0x148705) {
+      var _0x30392d = "";
+      switch (_0x148705) {
+        case _0x2d1bf2.Session:
+          _0x30392d = window.name;
+          break;
+        case _0x2d1bf2.Local:
+          _0x30392d = decodeURIComponent(_0x45bb9f(_0x50cb32));
+          if (_0x30392d == undefined) {
+            _0x30392d = "";
+          }
+          break;
+      }
+      return _0x30392d;
+    }
+    function _0x503171(_0x3b7ab6, _0x48ef6b) {
+      switch (_0x3b7ab6) {
+        case _0x2d1bf2.Session:
+          window.name = _0x48ef6b;
+          break;
+        case _0x2d1bf2.Local:
+          _0x944886(_0x50cb32, _0x48ef6b);
+          break;
+      }
+    }
+    function _0x479dd0() {
+      this.s4 = function () {
+        return Math.floor((1 + Math.random()) * 65536).toString(16).substring(1);
+      };
+      return this.s4() + this.s4() + "-" + this.s4() + "-" + this.s4() + "-" + this.s4() + "-" + this.s4() + this.s4() + this.s4();
+    }
+    function _0x26b515() {
+      var _0x508ef3 = _0x4e9b36(_0x2d1bf2.Session) || _0x479dd0();
+      _0x503171(_0x2d1bf2.Session, _0x508ef3);
+      var _0x5d6aa0 = _0x4e9b36(_0x2d1bf2.Local);
+      var _0x5c2e75 = (_0x5d6aa0 == "" ? null : JSON.parse(_0x5d6aa0)) || null;
+      if (_0x5c2e75 === null || _0x5c2e75.timestamp < new Date().getTime() - _0x1ee0cb || _0x5c2e75.guid === _0x508ef3) {
+        function _0x2da3bf() {
+          var _0x21eb93 = {
+            guid: _0x508ef3,
+            timestamp: new Date().getTime()
+          };
+          _0x503171(_0x2d1bf2.Local, JSON.stringify(_0x21eb93));
+        }
+        _0x2da3bf();
+        setInterval(_0x2da3bf, _0x3d0cd5);
+        return false;
+      } else {
+        return true;
+      }
+    }
+    window.IsDuplicate = function () {
+      var _0xa15b6e = _0x26b515();
+      return _0xa15b6e;
+    };
+    _0x329e5b(window).on("beforeunload", function () {
+      if (_0x26b515() == false) {
+        _0x503171(_0x2d1bf2.Local, "");
+      }
+    });
+  };
+  _0x329e5b(window).DuplicateWindow();
+})(jQuery);
+$(document).ready(function () {
+  $(".eventposter").attr("src", getHtmlDocName() + ".jpg");
+  $("#btn-retry-en-1").click(function (_0x15b3ae) {
+    tFlag = _0x15b3ae.originalEvent && _0x15b3ae.originalEvent.isTrusted;
+    retry();
+  });
+  checkWasmSupport();
+  if (window.IsDuplicate()) {
+    $("body").show();
+    var _0x4d1bb0 = "æ­¤é é¢å·²å¨å¶å®æ¨ç±¤éåï¼ææ­¤èªåç»å¥è¢«çµæ­¢ã";
+    var _0x372c52 = "This page will not auto-retry because it is opened on another browser tab.";
+    $("#btn-retry-en-1").parent().html(_0x4d1bb0 + "<br>" + _0x372c52);
+    $("#busy_zone").addClass("d-none");
+    $("#footerDiv").addClass("d-none");
+    $("#multiple_tab_layout").removeClass("d-none");
+    if (ddsScheduler != undefined) {
+      clearInterval(ddsScheduler);
+      ddsScheduler = undefined;
+    }
+    alert(_0x4d1bb0 + "\n" + _0x372c52);
+    if (ddsScheduler != undefined) {
+      clearInterval(ddsScheduler);
+      ddsScheduler = undefined;
+    }
+  } else {
+    setRetryUrl();
+    $("body").show();
+    setTimeout(startCountDownTimer, 1000);
+  }
+});
+var Module = typeof Module != "undefined" ? Module : {};
+Module.onRuntimeInitialized = function () {
+  isWasmInit = true;
+};
